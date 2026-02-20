@@ -1,0 +1,67 @@
+# =========================================
+# .htaccess - SULUT NEWS HUB (XAMPP Compatible)
+# Security & Performance Optimization
+# =========================================
+
+# Aktifkan Rewrite Engine
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+</IfModule>
+
+# Proteksi file sensitif
+<FilesMatch "\.(env|sql|log|ini|bak|json|csv|md)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Blokir akses folder sensitif
+<IfModule mod_rewrite.c>
+    RewriteRule ^config/ - [F,L]
+    RewriteRule ^database/ - [F,L]
+    RewriteRule ^cache/ - [F,L]
+    RewriteRule ^data/ - [F,L]
+    RewriteRule ^docs/ - [F,L]
+</IfModule>
+
+# Proteksi CLI-only scripts
+<FilesMatch "^(build_weather_cache)\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Proteksi directory listing
+Options -Indexes
+
+# Set default charset UTF-8
+AddDefaultCharset UTF-8
+
+# Kompresi GZIP untuk performa
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json
+</IfModule>
+
+# Browser Caching
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpeg "access plus 1 month"
+    ExpiresByType image/png "access plus 1 month"
+    ExpiresByType image/webp "access plus 1 month"
+    ExpiresByType text/css "access plus 1 week"
+    ExpiresByType application/javascript "access plus 1 week"
+    ExpiresByType video/mp4 "access plus 1 month"
+</IfModule>
+
+# Security Headers
+<IfModule mod_headers.c>
+    # XSS Protection
+    Header set X-XSS-Protection "1; mode=block"
+    # Prevent clickjacking
+    Header set X-Frame-Options "SAMEORIGIN"
+    # Prevent MIME type sniffing
+    Header set X-Content-Type-Options "nosniff"
+</IfModule>
+
+# PHP Settings (Disable untuk production nanti)
+# php_value upload_max_filesize 10M
+# php_value post_max_size 10M
+# php_value max_execution_time 300

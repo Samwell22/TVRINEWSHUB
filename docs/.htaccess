@@ -1,0 +1,5 @@
+# Block all access to documentation files
+# These should only be read via FTP/local access
+
+Order deny,allow
+Deny from all

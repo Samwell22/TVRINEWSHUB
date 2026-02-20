@@ -1,0 +1,30 @@
+# =========================================
+# .htaccess for Uploads Folder
+# Prevents PHP execution in upload directories
+# =========================================
+
+# Disable PHP execution
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+
+# Alternative: For PHP as CGI/FastCGI
+<FilesMatch "\.php$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Also prevent .phtml, .php3, .php4, .php5, .phps
+<FilesMatch "\.(php[345]?|phtml|phps)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Prevent directory listing
+Options -Indexes
+
+# Only allow specific safe file types
+<FilesMatch "\.(?i:(jpe?g|png|gif|webp|mp4|mov|avi|pdf))$">
+    Order allow,deny
+    Allow from all
+</FilesMatch>
