@@ -30,13 +30,21 @@ function getBaseUrl() {
     // Example: /TVRI NEWS HUB/admin/file.php -> /TVRI NEWS HUB/
     $path = dirname($script_name);
     
+    // Normalize backslashes to forward slashes (Windows dirname() returns "\" for root)
+    $path = str_replace('\\', '/', $path);
+    
     // Remove /admin, /api, /includes from path if present
     $path = preg_replace('#/(admin|api|includes).*$#', '', $path);
     
     // Ensure path ends with /
     $path = rtrim($path, '/') . '/';
     
-    // URL encode spaces and special characters in path
+    // Handle root path (VirtualHost DocumentRoot) — no encoding needed
+    if ($path === '/') {
+        return $protocol . $host . '/';
+    }
+    
+    // URL encode spaces and special characters in path (for subfolder installs)
     $path_parts = explode('/', trim($path, '/'));
     $encoded_parts = array_map('rawurlencode', $path_parts);
     $path = '/' . implode('/', $encoded_parts) . '/';
