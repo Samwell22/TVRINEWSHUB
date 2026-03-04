@@ -147,13 +147,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         // Split by new line
         $lines = array_filter(array_map('trim', explode("\n", $bulk_text)));
         $success_count = 0;
+        $bulk_category = sanitizeInput($_POST['bulk_category'] ?? '');
         
         foreach ($lines as $line) {
             if (!empty($line)) {
-                $insert_query = "INSERT INTO live_broadcast_schedule (broadcast_date, news_title, status, created_by, created_at) 
-                                VALUES (?, ?, 'scheduled', ?, NOW())";
+                $insert_query = "INSERT INTO live_broadcast_schedule (broadcast_date, news_title, news_category, status, created_by, created_at) 
+                                VALUES (?, ?, ?, 'scheduled', ?, NOW())";
                 $stmt = mysqli_prepare($conn, $insert_query);
-                mysqli_stmt_bind_param($stmt, 'ssi', $broadcast_date, $line, $logged_in_user['id']);
+                mysqli_stmt_bind_param($stmt, 'sssi', $broadcast_date, $line, $bulk_category, $logged_in_user['id']);
                 
                 if (mysqli_stmt_execute($stmt)) {
                     $success_count++;
@@ -176,13 +177,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'manual_add') {
     $news_title = sanitizeInput($_POST['news_title'] ?? '');
     $broadcast_date = sanitizeInput($_POST['broadcast_date'] ?? date('Y-m-d'));
+    $news_category = sanitizeInput($_POST['news_category'] ?? '');
     $assigned_to = !empty($_POST['assigned_to']) ? (int)$_POST['assigned_to'] : NULL;
     
     if (!empty($news_title) && trim($news_title) !== '' && $news_title !== '0') {
-        $insert_query = "INSERT INTO live_broadcast_schedule (broadcast_date, news_title, assigned_to, status, created_by, created_at) 
-                        VALUES (?, ?, ?, 'scheduled', ?, NOW())";
+        $insert_query = "INSERT INTO live_broadcast_schedule (broadcast_date, news_title, news_category, assigned_to, status, created_by, created_at) 
+                        VALUES (?, ?, ?, ?, 'scheduled', ?, NOW())";
         $stmt = mysqli_prepare($conn, $insert_query);
-        mysqli_stmt_bind_param($stmt, 'ssii', $broadcast_date, $news_title, $assigned_to, $logged_in_user['id']);
+        mysqli_stmt_bind_param($stmt, 'sssii', $broadcast_date, $news_title, $news_category, $assigned_to, $logged_in_user['id']);
         
         if (mysqli_stmt_execute($stmt)) {
             setFlashMessage('success', 'Jadwal broadcast berhasil ditambahkan!');
@@ -299,6 +301,16 @@ $reasons_result = mysqli_query($conn, $reasons_query);
 // Get all users for filter dropdown
 $users_query = "SELECT id, full_name FROM users WHERE is_active = 1 ORDER BY full_name ASC";
 $users_result = mysqli_query($conn, $users_query);
+
+// Get categories for dropdown
+$categories_query_bc = "SELECT id, name FROM categories WHERE is_active = 1 ORDER BY name ASC";
+$categories_result_bc = mysqli_query($conn, $categories_query_bc);
+$categories_list = [];
+if ($categories_result_bc) {
+    while ($cat = mysqli_fetch_assoc($categories_result_bc)) {
+        $categories_list[] = $cat;
+    }
+}
 
 // Set page variables
 $page_title = 'Live Broadcast Schedule';
@@ -625,6 +637,16 @@ include 'includes/header.php';
                     </div>
                     
                     <div class="mb-3">
+                        <label class="form-label">Kategori Berita</label>
+                        <select class="form-control" name="news_category">
+                            <option value="">-- Pilih Kategori --</option>
+                            <?php foreach ($categories_list as $cat): ?>
+                                <option value="<?php echo htmlspecialchars($cat['name']); ?>"><?php echo htmlspecialchars($cat['name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
                         <label class="form-label">Penanggung Jawab (opsional)</label>
                         <select class="form-control" name="assigned_to">
                             <option value="">-- Pilih User --</option>
@@ -662,6 +684,16 @@ include 'includes/header.php';
                     <div class="mb-3">
                         <label class="form-label">Tanggal Broadcast <span class="text-danger">*</span></label>
                         <input type="date" class="form-control" name="broadcast_date" value="<?php echo date('Y-m-d'); ?>" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Kategori Berita (untuk semua judul di bawah)</label>
+                        <select class="form-control" name="bulk_category">
+                            <option value="">-- Pilih Kategori --</option>
+                            <?php foreach ($categories_list as $cat): ?>
+                                <option value="<?php echo htmlspecialchars($cat['name']); ?>"><?php echo htmlspecialchars($cat['name']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                     
                     <div class="mb-3">
@@ -802,6 +834,72 @@ include 'includes/header.php';
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: EDIT BROADCAST (Failed Only) -->
+<div class="modal fade" id="editBroadcastModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fas fa-edit"></i> Edit Berita Gagal Tayang</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editId">
+                
+                <div class="mb-3">
+                    <label class="form-label">Judul Berita <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="editTitle" placeholder="Judul berita..." required>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Kategori Berita</label>
+                    <select class="form-control" id="editCategory">
+                        <option value="">-- Pilih Kategori --</option>
+                        <?php foreach ($categories_list as $cat): ?>
+                            <option value="<?php echo htmlspecialchars($cat['name']); ?>"><?php echo htmlspecialchars($cat['name']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Ubah Status</label>
+                    <select class="form-control" id="editStatus" onchange="toggleEditReasonFields()">
+                        <option value="failed">Gagal Tayang</option>
+                        <option value="broadcasted">Tayang</option>
+                        <option value="scheduled">Scheduled (Dijadwalkan Ulang)</option>
+                    </select>
+                    <small class="text-muted">Ubah status jika berita akhirnya berhasil tayang atau dijadwalkan ulang.</small>
+                </div>
+                
+                <div id="editReasonSection">
+                    <div class="mb-3">
+                        <label class="form-label">Alasan Gagal Tayang</label>
+                        <select class="form-control" id="editReasonType" onchange="toggleEditCustomReason()">
+                            <option value="">-- Pilih Alasan --</option>
+                            <?php 
+                            mysqli_data_seek($reasons_result, 0);
+                            while ($reason = mysqli_fetch_assoc($reasons_result)): 
+                            ?>
+                                <option value="<?php echo $reason['reason']; ?>"><?php echo $reason['reason']; ?></option>
+                            <?php endwhile; ?>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3" id="editCustomReasonDiv" style="display: none;">
+                        <label class="form-label">Tulis Alasan Custom</label>
+                        <textarea class="form-control" id="editReasonCustom" rows="3" placeholder="Jelaskan kenapa gagal tayang..."></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <button type="button" id="editSubmitBtn" class="btn btn-primary" onclick="submitEditBroadcast()">
+                    <i class="fas fa-save"></i> Simpan Perubahan
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -1187,8 +1285,97 @@ function toggleCustomReason() {
     }
 }
 
-function editBroadcast(id) {
-    alert('Fitur edit akan ditambahkan. ID: ' + id);
+function editBroadcast(id, title, category, reasonType, reasonCustom) {
+    document.getElementById('editId').value = id;
+    document.getElementById('editTitle').value = title || '';
+    document.getElementById('editCategory').value = category || '';
+    document.getElementById('editStatus').value = 'failed';
+    document.getElementById('editReasonType').value = reasonType || '';
+    document.getElementById('editReasonCustom').value = reasonCustom || '';
+    
+    // Toggle reason fields visibility based on status
+    toggleEditReasonFields();
+    
+    // Toggle custom reason visibility
+    toggleEditCustomReason();
+    
+    const modalElement = document.getElementById('editBroadcastModal');
+    const modal = new bootstrap.Modal(modalElement);
+    modal.show();
+}
+
+function toggleEditReasonFields() {
+    const status = document.getElementById('editStatus').value;
+    const reasonSection = document.getElementById('editReasonSection');
+    if (status === 'failed') {
+        reasonSection.style.display = 'block';
+    } else {
+        reasonSection.style.display = 'none';
+    }
+}
+
+function toggleEditCustomReason() {
+    const select = document.getElementById('editReasonType');
+    const customDiv = document.getElementById('editCustomReasonDiv');
+    if (select.value === 'Lainnya (tulis manual)') {
+        customDiv.style.display = 'block';
+    } else {
+        customDiv.style.display = 'none';
+    }
+}
+
+function submitEditBroadcast() {
+    const id = document.getElementById('editId').value;
+    const title = document.getElementById('editTitle').value.trim();
+    const category = document.getElementById('editCategory').value;
+    const status = document.getElementById('editStatus').value;
+    const reasonType = document.getElementById('editReasonType').value;
+    const reasonCustom = document.getElementById('editReasonCustom').value;
+    
+    if (!title) {
+        alert('Judul berita harus diisi!');
+        return;
+    }
+    
+    if (status === 'failed' && !reasonType) {
+        alert('Alasan gagal tayang harus dipilih!');
+        return;
+    }
+    
+    const submitBtn = document.getElementById('editSubmitBtn');
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+    
+    const formData = new FormData();
+    formData.append('id', id);
+    formData.append('status', status);
+    formData.append('news_title', title);
+    formData.append('news_category', category);
+    formData.append('edit_mode', '1');
+    if (status === 'failed') {
+        formData.append('failure_reason_type', reasonType);
+        formData.append('failure_reason_custom', reasonCustom);
+    }
+    
+    fetch('broadcast-update-status.php', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Gagal: ' + data.message);
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-save"></i> Simpan Perubahan';
+        }
+    })
+    .catch(error => {
+        alert('Terjadi kesalahan: ' + error.message);
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-save"></i> Simpan Perubahan';
+    });
 }
 
 function getSelectedScheduleIds() {

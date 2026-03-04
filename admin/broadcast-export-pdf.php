@@ -121,6 +121,21 @@ mysqli_stmt_bind_param($stmt, 'ss', $start_date, $end_date);
 mysqli_stmt_execute($stmt);
 $failed_list = mysqli_stmt_get_result($stmt);
 
+// Get category distribution
+$category_query = "SELECT 
+                   COALESCE(NULLIF(news_category, ''), 'Tanpa Kategori') as category_name,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN status = 'broadcasted' THEN 1 ELSE 0 END) as broadcasted,
+                   SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+                   FROM live_broadcast_schedule
+                   WHERE broadcast_date BETWEEN ? AND ?
+                   GROUP BY COALESCE(NULLIF(news_category, ''), 'Tanpa Kategori')
+                   ORDER BY total DESC";
+$stmt = mysqli_prepare($conn, $category_query);
+mysqli_stmt_bind_param($stmt, 'ss', $start_date, $end_date);
+mysqli_stmt_execute($stmt);
+$category_result = mysqli_stmt_get_result($stmt);
+
 // Set headers untuk PDF download (using browser print to PDF)
 // Alternatif: bisa pakai library TCPDF atau DomPDF untuk generate native PDF
 ?>
@@ -298,6 +313,38 @@ $failed_list = mysqli_stmt_get_result($stmt);
         </tbody>
     </table>
 
+    <!-- Category Distribution -->
+    <?php if (mysqli_num_rows($category_result) > 0): ?>
+    <div class="section-title">📁 Distribusi Kategori Berita</div>
+    <table>
+        <thead>
+            <tr>
+                <th>Kategori</th>
+                <th style="text-align: center;">Total</th>
+                <th style="text-align: center;">Tayang</th>
+                <th style="text-align: center;">Gagal</th>
+                <th style="text-align: center;">Persentase dari Total</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php 
+            $grand_total = $overall_stats['total'];
+            mysqli_data_seek($category_result, 0);
+            while ($cat = mysqli_fetch_assoc($category_result)): 
+                $cat_percentage = $grand_total > 0 ? round(($cat['total'] / $grand_total) * 100, 1) : 0;
+            ?>
+                <tr>
+                    <td><strong><?php echo htmlspecialchars($cat['category_name']); ?></strong></td>
+                    <td style="text-align: center;"><strong><?php echo $cat['total']; ?></strong></td>
+                    <td style="text-align: center;" class="success"><?php echo $cat['broadcasted']; ?></td>
+                    <td style="text-align: center;" class="failed"><?php echo $cat['failed']; ?></td>
+                    <td style="text-align: center;"><?php echo $cat_percentage; ?>%</td>
+                </tr>
+            <?php endwhile; ?>
+        </tbody>
+    </table>
+    <?php endif; ?>
+
     <!-- Failure Reasons -->
     <?php if (mysqli_num_rows($reasons_result) > 0): ?>
     <div class="section-title">⚠️ Alasan Gagal Tayang</div>
@@ -334,6 +381,7 @@ $failed_list = mysqli_stmt_get_result($stmt);
             <tr>
                 <th style="width: 100px;">Tanggal</th>
                 <th>Judul Berita</th>
+                <th style="width: 120px;">Kategori</th>
                 <th style="width: 150px;">Alasan</th>
                 <th style="width: 120px;">Dibuat Oleh</th>
             </tr>
@@ -346,6 +394,7 @@ $failed_list = mysqli_stmt_get_result($stmt);
                 <tr>
                     <td><?php echo date('d M Y', strtotime($failed['broadcast_date'])); ?></td>
                     <td><?php echo htmlspecialchars($failed['news_title']); ?></td>
+                    <td><?php echo htmlspecialchars($failed['news_category'] ?: '-'); ?></td>
                     <td>
                         <strong><?php echo htmlspecialchars($failed['failure_reason_type']); ?></strong>
                         <?php if (!empty($failed['failure_reason_custom'])): ?>

@@ -21,10 +21,48 @@ $conn = getDBConnection();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = (int)($_POST['id'] ?? 0);
     $status = sanitizeInput($_POST['status'] ?? '');
+    $edit_mode = isset($_POST['edit_mode']) && $_POST['edit_mode'] === '1';
     
     if ($id > 0 && in_array($status, ['scheduled', 'broadcasted', 'failed'])) {
         
-        if ($status === 'failed') {
+        if ($edit_mode) {
+            // Edit mode: update title, category, status, and reason
+            $news_title = sanitizeInput($_POST['news_title'] ?? '');
+            $news_category = sanitizeInput($_POST['news_category'] ?? '');
+            
+            if (empty($news_title)) {
+                echo json_encode(['success' => false, 'message' => 'Judul berita harus diisi!']);
+                exit;
+            }
+            
+            if ($status === 'failed') {
+                $failure_reason_type = sanitizeInput($_POST['failure_reason_type'] ?? '');
+                $failure_reason_custom = sanitizeInput($_POST['failure_reason_custom'] ?? '');
+                
+                $update_query = "UPDATE live_broadcast_schedule 
+                                SET news_title = ?,
+                                    news_category = ?,
+                                    status = 'failed', 
+                                    failure_reason_type = ?, 
+                                    failure_reason_custom = ?,
+                                    updated_at = NOW()
+                                WHERE id = ?";
+                $stmt = mysqli_prepare($conn, $update_query);
+                mysqli_stmt_bind_param($stmt, 'ssssi', $news_title, $news_category, $failure_reason_type, $failure_reason_custom, $id);
+            } else {
+                // Changed from failed to broadcasted or scheduled
+                $update_query = "UPDATE live_broadcast_schedule 
+                                SET news_title = ?,
+                                    news_category = ?,
+                                    status = ?, 
+                                    failure_reason_type = NULL, 
+                                    failure_reason_custom = NULL,
+                                    updated_at = NOW()
+                                WHERE id = ?";
+                $stmt = mysqli_prepare($conn, $update_query);
+                mysqli_stmt_bind_param($stmt, 'sssi', $news_title, $news_category, $status, $id);
+            }
+        } elseif ($status === 'failed') {
             // Mark as failed with reason
             $failure_reason_type = sanitizeInput($_POST['failure_reason_type'] ?? '');
             $failure_reason_custom = sanitizeInput($_POST['failure_reason_custom'] ?? '');
