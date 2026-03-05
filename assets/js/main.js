@@ -143,19 +143,54 @@ document.addEventListener('DOMContentLoaded', function() {
     // (handled by .scrolled class in CSS)
     
     // AUTO CLOSE NAVBAR ON MOBILE WHEN LINK CLICKED
-    const navLinks = document.querySelectorAll('.navbar-nav .nav-link');
-    const navbarCollapse = document.querySelector('.navbar-collapse');
+    // Uses event delegation on the collapse container for robustness
+    const navbarCollapse = document.getElementById('mainNavbar');
     
-    navLinks.forEach(function(link) {
-        link.addEventListener('click', function() {
-            if (window.innerWidth < 992) {
-                const bsCollapse = new bootstrap.Collapse(navbarCollapse, {
-                    toggle: false
-                });
-                bsCollapse.hide();
+    if (navbarCollapse) {
+        // GUARD: Prevent navbar from closing while a dropdown is open
+        navbarCollapse.addEventListener('hide.bs.collapse', function(e) {
+            if (window.innerWidth >= 992) return;
+            var openDropdown = this.querySelector('.dropdown-menu.show');
+            if (openDropdown) {
+                e.preventDefault();
+                e.stopPropagation();
             }
         });
-    });
+        
+        // EVENT DELEGATION: handle all clicks inside the navbar
+        navbarCollapse.addEventListener('click', function(e) {
+            if (window.innerWidth >= 992) return;
+            
+            var clickedLink = e.target.closest('a');
+            if (!clickedLink) return;
+            
+            // SKIP dropdown toggles — let Bootstrap handle the dropdown
+            if (clickedLink.classList.contains('dropdown-toggle')) return;
+            if (clickedLink.getAttribute('data-bs-toggle') === 'dropdown') return;
+            
+            // SKIP modal triggers (search icon)
+            if (clickedLink.getAttribute('data-bs-toggle') === 'modal') return;
+            
+            // For all other links (nav-links, dropdown-items): close navbar
+            if (clickedLink.classList.contains('nav-link') || clickedLink.classList.contains('dropdown-item')) {
+                // First close any open dropdown
+                var openDropdown = this.querySelector('.dropdown-menu.show');
+                if (openDropdown) {
+                    var dropdownToggle = openDropdown.previousElementSibling;
+                    if (dropdownToggle) {
+                        var ddInstance = bootstrap.Dropdown.getInstance(dropdownToggle);
+                        if (ddInstance) ddInstance.hide();
+                    }
+                }
+                // Then close the navbar (slight delay to allow dropdown to close first)
+                var self = this;
+                setTimeout(function() {
+                    var bsCollapse = bootstrap.Collapse.getInstance(self);
+                    if (bsCollapse) bsCollapse.hide();
+                }, 50);
+            }
+        });
+    }
     
     // SEARCH MODAL - AUTO FOCUS ON INPUT
     const searchModal = document.getElementById('searchModal');
